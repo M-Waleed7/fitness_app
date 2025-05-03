@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:light/light.dart'; // Add this package for light sensor
 
 class SensorActivityDetector extends StatefulWidget {
   const SensorActivityDetector({Key? key}) : super(key: key);
@@ -13,6 +14,7 @@ class SensorActivityDetector extends StatefulWidget {
 class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   List<double> _accMagnitudes = [];
   List<double> _gyroValues = [];
+  double _lightLevel = 0.0;
   String _predictedActivity = 'Detecting...';
   String _lastActivity = '';
   Map<String, int> _activityDurations = {}; // in seconds
@@ -20,6 +22,11 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   late Timer _durationTimer;
   int _currentActivityDuration = 0;
   DateTime? _currentActivityStartTime;
+  DateTime? _stillStartTime;
+
+  // For light sensor
+  Light? _light;
+  StreamSubscription? _lightSubscription;
 
   @override
   void initState() {
@@ -51,6 +58,26 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       _gyroValues.add(motion);
       if (_gyroValues.length > 100) _gyroValues.removeAt(0);
     });
+
+    // Initialize and listen to light sensor events
+    _initializeLightSensor();
+  }
+
+  void _initializeLightSensor() {
+    try {
+      _light = Light();
+      _lightSubscription = _light?.lightSensorStream.listen((int luxValue) {
+        setState(() {
+          _lightLevel = luxValue.toDouble();
+        });
+      });
+    } catch (e) {
+      print('Error initializing light sensor: $e');
+      // Fallback if light sensor is not available
+      setState(() {
+        _lightLevel = -1.0; // Indicates no sensor available
+      });
+    }
   }
 
   void _updateCurrentActivityDuration() {
@@ -63,43 +90,64 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   }
 
   void _classifyActivity() {
+    if (_accMagnitudes.length < 10 || _gyroValues.length < 10) {
+      print("Insufficient sensor data. Skipping classification.");
+      return;
+    }
+
     double avgAcc =
-        _accMagnitudes.fold(0.0, (a, b) => a + b) /
-        max(_accMagnitudes.length, 1);
+        _accMagnitudes.fold(0.0, (a, b) => a + b) / _accMagnitudes.length;
     double varAcc =
         _accMagnitudes
             .map((e) => pow(e - avgAcc, 2).toDouble())
-            .fold(0.0, (a, b) => a + b) /
-        max(_accMagnitudes.length, 1);
+            .reduce((a, b) => a + b) /
+        _accMagnitudes.length;
     double avgGyro =
-        _gyroValues.fold(0.0, (a, b) => a + b) / max(_gyroValues.length, 1);
+        _gyroValues.fold(0.0, (a, b) => a + b) / _gyroValues.length;
+
+    print("------ Activity Classification Check ------");
+    print("Light Level: $_lightLevel");
+    print("Average Acc: $avgAcc");
+    print("Variance Acc: $varAcc");
+    print("Average Gyro: $avgGyro");
 
     String activity;
+    bool isStill = varAcc < 0.01 && avgGyro < 0.3;
 
-    if (avgAcc < 5.0 && avgGyro < 0.2) {
-      activity = 'Still';
+    if (isStill) {
+      _stillStartTime ??= DateTime.now(); // Ensure it's initialized
+      int stillDuration = DateTime.now().difference(_stillStartTime!).inSeconds;
+
+      if (_lightLevel < 10 && stillDuration > 60) {
+        print(
+          'Detected Sleeping after $stillDuration seconds in low light ($_lightLevel).',
+        );
+        activity = 'Sleeping';
+      } else {
+        print(
+          'Detected Still: Light=$_lightLevel, Duration=$stillDuration seconds',
+        );
+        activity = 'Still';
+      }
+    } else {
+      _stillStartTime = null;
+      print("Detected Motion: Classifying...");
+
+      if (avgAcc > 18 && varAcc > 8.0 && avgGyro > 0.5) {
+        activity = 'Jumping';
+      } else if (avgAcc > 13 && avgGyro > 1.5 && varAcc > 3.0 && varAcc < 8.0) {
+        activity = 'Running';
+      } else if (avgAcc > 9.5 && varAcc > 1.0 && avgAcc < 13) {
+        activity = 'Walking';
+      } else {
+        print(
+          "Motion does not match any activity thresholds. Defaulting to Still.",
+        );
+        activity = 'Still';
+      }
     }
-    // Jumping: High acceleration + high variance + moderate gyro
-    else if (avgAcc > 18 && varAcc > 8.0 && avgGyro > 0.5) {
-      activity = 'Jumping';
-    }
-    // Running: High acceleration + moderate variance + high gyro
-    else if (avgAcc > 13 && avgGyro > 1.5 && varAcc > 3.0 && varAcc < 8.0) {
-      activity = 'Running';
-    }
-    // Walking: Moderate acceleration + moderate variance
-    else if (avgAcc > 9.5 && varAcc > 1.0 && avgAcc < 13) {
-      activity = 'Walking';
-    }
-    // Sitting: Low acceleration + low gyro
-    else if (avgAcc < 9.8 && avgGyro < 0.5) {
-      activity = 'Sitting';
-    }
-    // Default to Sleeping (very low movement)
-    else {
-      activity = 'Sleeping';
-    }
-    // Track activity duration
+
+    // Update activity tracking
     if (activity != _lastActivity) {
       _currentActivityStartTime = DateTime.now();
       _currentActivityDuration = 0;
@@ -120,6 +168,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   void dispose() {
     _processingTimer.cancel();
     _durationTimer.cancel();
+    _lightSubscription?.cancel();
     super.dispose();
   }
 
@@ -137,8 +186,6 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
         return Colors.blueAccent;
       case 'Jumping':
         return Colors.greenAccent;
-      case 'Sitting':
-        return Colors.orangeAccent;
       case 'Still':
         return Colors.grey;
       case 'Sleeping':
@@ -269,6 +316,8 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                   style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
               ),
+            SizedBox(height: 24),
+            // Light Sensor Card
           ],
         ),
       ),
