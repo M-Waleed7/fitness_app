@@ -23,6 +23,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     'Walking': 600,
     'Jumping': 180,
     'Sleeping': 28800,
+    'Sitting': 1200, // for example, 20 minutes
   };
 
   late Timer _processingTimer;
@@ -40,6 +41,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   final _surfaceColor = Color(0xFF2C2C2C);
   final _primaryTextColor = Colors.white;
   final _secondaryTextColor = Colors.white70;
+  double _userWeight = 70.0; // Default weight in kg
 
   @override
   void initState() {
@@ -73,6 +75,46 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     });
 
     _initializeLightSensor();
+  }
+
+  double _calculateCaloriesBurnt(String activity, int durationInSeconds) {
+    double metValue;
+
+    switch (activity) {
+      case 'Running':
+        metValue = 9.8; // Moderate running
+        break;
+      case 'Walking':
+        metValue = 3.8; // Brisk walking
+        break;
+      case 'Jumping':
+        metValue = 10.0; // Vigorous jump rope
+        break;
+      case 'Sitting':
+        metValue = 1.0; // Resting MET
+        break;
+      case 'Sleeping':
+        metValue = 0.9;
+        break;
+      default:
+        metValue = 1.0;
+    }
+    // Convert duration to hours
+    double durationInHours = durationInSeconds / 3600.0;
+
+    // Calories burned formula: Calories = MET * weight (kg) * duration (hr)
+    return metValue * _userWeight * durationInHours;
+  }
+
+  // Calculate total calories burned across all activities
+  double _calculateTotalCaloriesBurnt() {
+    double totalCalories = 0.0;
+
+    _activityDurations.forEach((activity, duration) {
+      totalCalories += _calculateCaloriesBurnt(activity, duration);
+    });
+
+    return totalCalories;
   }
 
   void _initializeLightSensor() {
@@ -122,7 +164,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       if (_lightLevel < 10 && stillDuration > 60) {
         activity = 'Sleeping';
       } else {
-        activity = 'Still';
+        activity = 'Sitting';
       }
     } else {
       _stillStartTime = null;
@@ -134,7 +176,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       } else if (avgAcc > 9.5 && varAcc > 1.0 && avgAcc < 13) {
         activity = 'Walking';
       } else {
-        activity = 'Still';
+        activity = 'Sitting';
       }
     }
 
@@ -142,6 +184,9 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       _currentActivityStartTime = DateTime.now();
       _currentActivityDuration = 0;
     }
+
+    // Debug: Check if sitting activity is detected
+    print("Detected activity: $activity");
 
     if (activity == _lastActivity) {
       _activityDurations[activity] = (_activityDurations[activity] ?? 0) + 2;
@@ -211,6 +256,63 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     );
   }
 
+  void _setUserWeightDialog() {
+    final controller = TextEditingController(text: _userWeight.toString());
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: _surfaceColor,
+            title: Text(
+              'Set Your Weight',
+              style: TextStyle(color: _primaryTextColor),
+            ),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: _primaryTextColor),
+              decoration: InputDecoration(
+                hintText: 'Enter weight in kg',
+                hintStyle: TextStyle(color: _secondaryTextColor),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Colors.blueAccent.withOpacity(0.5),
+                  ),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.blueAccent),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey[400]),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  final input = double.tryParse(controller.text);
+                  if (input != null && input > 0) {
+                    setState(() {
+                      _userWeight = input;
+                    });
+                  }
+                  Navigator.pop(context);
+                },
+                child: Text('Save'),
+              ),
+            ],
+          ),
+    );
+  }
+
   @override
   void dispose() {
     _processingTimer.cancel();
@@ -233,7 +335,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
         return Color(0xFF448AFF); // Bright blue
       case 'Jumping':
         return Color.fromARGB(255, 178, 217, 71); // Bright green
-      case 'Still':
+      case 'Sitting':
         return Color.fromARGB(255, 214, 211, 211); // Medium grey
       case 'Sleeping':
         return Color.fromARGB(255, 44, 205, 103); // Rich purple
@@ -244,6 +346,9 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate total calories
+    final totalCalories = _calculateTotalCaloriesBurnt();
+
     return Scaffold(
       backgroundColor: _darkBackground,
       appBar: AppBar(
@@ -254,6 +359,13 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
         centerTitle: true,
         elevation: 0,
         backgroundColor: _getActivityColor(_predictedActivity).withOpacity(0.8),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.person_outline),
+            onPressed: _setUserWeightDialog,
+            tooltip: 'Set Weight',
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -274,6 +386,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Current Activity Card
                 Card(
                   elevation: 8,
                   color: _cardBackground,
@@ -337,10 +450,89 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                             ),
                           ],
                         ),
+                        SizedBox(height: 16),
+                        // Current activity calories burnt display
+                        Text(
+                          "Current Calories: ${_calculateCaloriesBurnt(_predictedActivity, _currentActivityDuration).toStringAsFixed(2)} kcal",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _primaryTextColor,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
+
+                // Total Calories Card
+                SizedBox(height: 24),
+                Card(
+                  elevation: 8,
+                  color: _cardBackground,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: Colors.amber.withOpacity(0.6),
+                      width: 2,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Text(
+                          "TOTAL CALORIES BURNED",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _secondaryTextColor,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.local_fire_department,
+                              color: Colors.amber,
+                              size: 40,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              "${totalCalories.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              "kcal",
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                                color: _primaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          "Weight: $_userWeight kg",
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: _secondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Activity Detail Cards
                 SizedBox(height: 30),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -368,11 +560,16 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                   ),
                 ),
                 SizedBox(height: 16),
+                // List of activity cards with progress
                 ..._activityGoals.entries.map((entry) {
                   final activity = entry.key;
                   final goal = entry.value;
                   final done = _activityDurations[activity] ?? 0;
                   final progress = (done / goal).clamp(0.0, 1.0);
+                  final caloriesBurned = _calculateCaloriesBurnt(
+                    activity,
+                    done,
+                  );
 
                   return Padding(
                     padding: EdgeInsets.only(bottom: 12),
@@ -463,13 +660,37 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                             if (done > 0)
                               Padding(
                                 padding: EdgeInsets.only(top: 8),
-                                child: Text(
-                                  '${(progress * 100).toInt()}% Complete',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: _getActivityColor(activity),
-                                  ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${(progress * 100).toInt()}% Complete',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: _getActivityColor(activity),
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.local_fire_department,
+                                          size: 16,
+                                          color: Colors.amber,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          '${caloriesBurned.toStringAsFixed(2)} kcal',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.amber,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                           ],
