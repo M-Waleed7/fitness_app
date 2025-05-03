@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:light/light.dart'; // Add this package for light sensor
+import 'package:light/light.dart';
 
 class SensorActivityDetector extends StatefulWidget {
   const SensorActivityDetector({Key? key}) : super(key: key);
@@ -17,14 +17,20 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   double _lightLevel = 0.0;
   String _predictedActivity = 'Detecting...';
   String _lastActivity = '';
-  Map<String, int> _activityDurations = {}; // in seconds
+  Map<String, int> _activityDurations = {};
+  Map<String, int> _activityGoals = {
+    'Running': 300,
+    'Walking': 600,
+    'Jumping': 180,
+    'Sleeping': 28800,
+  };
+
   late Timer _processingTimer;
   late Timer _durationTimer;
   int _currentActivityDuration = 0;
   DateTime? _currentActivityStartTime;
   DateTime? _stillStartTime;
 
-  // For light sensor
   Light? _light;
   StreamSubscription? _lightSubscription;
 
@@ -59,7 +65,6 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       if (_gyroValues.length > 100) _gyroValues.removeAt(0);
     });
 
-    // Initialize and listen to light sensor events
     _initializeLightSensor();
   }
 
@@ -73,9 +78,8 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       });
     } catch (e) {
       print('Error initializing light sensor: $e');
-      // Fallback if light sensor is not available
       setState(() {
-        _lightLevel = -1.0; // Indicates no sensor available
+        _lightLevel = -1.0;
       });
     }
   }
@@ -90,48 +94,31 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   }
 
   void _classifyActivity() {
-    if (_accMagnitudes.length < 10 || _gyroValues.length < 10) {
-      print("Insufficient sensor data. Skipping classification.");
-      return;
-    }
+    if (_accMagnitudes.length < 10 || _gyroValues.length < 10) return;
 
     double avgAcc =
-        _accMagnitudes.fold(0.0, (a, b) => a + b) / _accMagnitudes.length;
+        _accMagnitudes.reduce((a, b) => a + b) / _accMagnitudes.length;
     double varAcc =
         _accMagnitudes
             .map((e) => pow(e - avgAcc, 2).toDouble())
             .reduce((a, b) => a + b) /
         _accMagnitudes.length;
-    double avgGyro =
-        _gyroValues.fold(0.0, (a, b) => a + b) / _gyroValues.length;
-
-    print("------ Activity Classification Check ------");
-    print("Light Level: $_lightLevel");
-    print("Average Acc: $avgAcc");
-    print("Variance Acc: $varAcc");
-    print("Average Gyro: $avgGyro");
+    double avgGyro = _gyroValues.reduce((a, b) => a + b) / _gyroValues.length;
 
     String activity;
     bool isStill = varAcc < 0.01 && avgGyro < 0.3;
 
     if (isStill) {
-      _stillStartTime ??= DateTime.now(); // Ensure it's initialized
+      _stillStartTime ??= DateTime.now();
       int stillDuration = DateTime.now().difference(_stillStartTime!).inSeconds;
 
       if (_lightLevel < 10 && stillDuration > 60) {
-        print(
-          'Detected Sleeping after $stillDuration seconds in low light ($_lightLevel).',
-        );
         activity = 'Sleeping';
       } else {
-        print(
-          'Detected Still: Light=$_lightLevel, Duration=$stillDuration seconds',
-        );
         activity = 'Still';
       }
     } else {
       _stillStartTime = null;
-      print("Detected Motion: Classifying...");
 
       if (avgAcc > 18 && varAcc > 8.0 && avgGyro > 0.5) {
         activity = 'Jumping';
@@ -140,14 +127,10 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       } else if (avgAcc > 9.5 && varAcc > 1.0 && avgAcc < 13) {
         activity = 'Walking';
       } else {
-        print(
-          "Motion does not match any activity thresholds. Defaulting to Still.",
-        );
         activity = 'Still';
       }
     }
 
-    // Update activity tracking
     if (activity != _lastActivity) {
       _currentActivityStartTime = DateTime.now();
       _currentActivityDuration = 0;
@@ -162,6 +145,40 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     setState(() {
       _predictedActivity = activity;
     });
+  }
+
+  void _setGoalDialog(String activity) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Set Goal for $activity'),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(hintText: 'Enter goal in seconds'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final input = int.tryParse(controller.text);
+                  if (input != null && input > 0) {
+                    setState(() {
+                      _activityGoals[activity] = input;
+                    });
+                  }
+                  Navigator.pop(context);
+                },
+                child: Text('Save'),
+              ),
+            ],
+          ),
+    );
   }
 
   @override
@@ -204,121 +221,131 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
         elevation: 0,
         backgroundColor: _getActivityColor(_predictedActivity),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Current Activity Card
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Text(
-                      "CURRENT ACTIVITY",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      _predictedActivity,
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: _getActivityColor(_predictedActivity),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.timer, color: Colors.grey),
-                        SizedBox(width: 8),
-                        Text(
-                          _formatDuration(_currentActivityDuration),
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w500,
-                          ),
+      body: Container(
+        color: Colors.black,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Text(
+                        "CURRENT ACTIVITY",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[600],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        _predictedActivity,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: _getActivityColor(_predictedActivity),
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.timer, color: Colors.grey),
+                          SizedBox(width: 8),
+                          Text(
+                            _formatDuration(_currentActivityDuration),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            SizedBox(height: 24),
-            // Activity History
-            Text(
-              "Activity Summary",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 12),
-            ..._activityDurations.entries
-                .map(
-                  (e) => Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6),
-                    child: Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _getActivityColor(e.key),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                e.key,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
+              SizedBox(height: 24),
+              Text(
+                "Activity Summary",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              ..._activityGoals.entries.map((entry) {
+                final activity = entry.key;
+                final goal = entry.value;
+                final done = _activityDurations[activity] ?? 0;
+                final progress = (done / goal).clamp(0.0, 1.0);
+
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: _getActivityColor(activity),
+                                  shape: BoxShape.circle,
                                 ),
                               ),
-                            ),
-                            Text(
-                              _formatDuration(e.value),
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[700],
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  activity,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
+                              IconButton(
+                                icon: Icon(Icons.edit, size: 20),
+                                onPressed: () => _setGoalDialog(activity),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor: Colors.grey[300],
+                            color: _getActivityColor(activity),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '${_formatDuration(done)} / ${_formatDuration(goal)}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                )
-                .toList(),
-            if (_activityDurations.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text(
-                  "No activities recorded yet",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              ),
-            SizedBox(height: 24),
-            // Light Sensor Card
-          ],
+                );
+              }).toList(),
+            ],
+          ),
         ),
       ),
     );
