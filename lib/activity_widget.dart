@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:light/light.dart';
+import 'package:intl/intl.dart'; // Add this import for date formatting
 
 class SensorActivityDetector extends StatefulWidget {
   const SensorActivityDetector({Key? key}) : super(key: key);
@@ -25,6 +26,12 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     'Sleeping': 28800,
     'Sitting': 1200, // for example, 20 minutes
   };
+
+  // Date filtering related variables
+  DateTime _selectedDate = DateTime.now();
+  DateTime _filterStartDate = DateTime.now();
+  DateTime _filterEndDate = DateTime.now();
+  String _filterType = 'Today'; // 'Today', 'Date Range', 'All Time'
 
   late Timer _processingTimer;
   late Timer _durationTimer;
@@ -188,8 +195,13 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     // Debug: Check if sitting activity is detected
     print("Detected activity: $activity");
 
+    // When activity changes or continues, save it with the current date
+    // This is where you'd save the activity data with timestamp to your database
     if (activity == _lastActivity) {
       _activityDurations[activity] = (_activityDurations[activity] ?? 0) + 2;
+
+      // TODO: When implementing database, save this activity increment with the current date
+      // Example: saveActivityUpdate(activity, 2, DateTime.now());
     } else {
       _lastActivity = activity;
     }
@@ -197,6 +209,251 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     setState(() {
       _predictedActivity = activity;
     });
+  }
+
+  // New function to filter activity data by date
+  Map<String, int> _getFilteredActivityData() {
+    // TODO: When implementing database, replace this with actual queries
+    // based on the selected filter type and dates
+
+    switch (_filterType) {
+      case 'Today':
+        // Return only today's activities
+        // Example query: getActivitiesByDate(_selectedDate);
+        return _activityDurations; // Currently returns all data as placeholder
+
+      case 'Date Range':
+        // Return activities within date range
+        // Example query: getActivitiesByDateRange(_filterStartDate, _filterEndDate);
+        return _activityDurations; // Currently returns all data as placeholder
+
+      case 'All Time':
+      default:
+        // Return all stored activities
+        // Example query: getAllActivities();
+        return _activityDurations;
+    }
+  }
+
+  void _showDateFilterDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  backgroundColor: _surfaceColor,
+                  title: Text(
+                    'Filter Activities',
+                    style: TextStyle(color: _primaryTextColor),
+                  ),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Filter type selection
+                        Text(
+                          'Filter by:',
+                          style: TextStyle(color: _secondaryTextColor),
+                        ),
+                        SizedBox(height: 8),
+                        DropdownButton<String>(
+                          dropdownColor: _cardBackground,
+                          value: _filterType,
+                          isExpanded: true,
+                          style: TextStyle(color: _primaryTextColor),
+                          underline: Container(
+                            height: 1,
+                            color: Colors.blueAccent,
+                          ),
+                          onChanged: (String? newValue) {
+                            if (newValue != null) {
+                              setDialogState(() {
+                                _filterType = newValue;
+                              });
+                            }
+                          },
+                          items:
+                              <String>[
+                                'Today',
+                                'Date Range',
+                                'All Time',
+                              ].map<DropdownMenuItem<String>>((String value) {
+                                return DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Text(value),
+                                );
+                              }).toList(),
+                        ),
+
+                        SizedBox(height: 16),
+
+                        // Show date pickers based on filter type
+                        if (_filterType == 'Today')
+                          ListTile(
+                            title: Text(
+                              'Select Date',
+                              style: TextStyle(color: _primaryTextColor),
+                            ),
+                            subtitle: Text(
+                              DateFormat('MMM dd, yyyy').format(_selectedDate),
+                              style: TextStyle(color: Colors.blueAccent),
+                            ),
+                            trailing: Icon(
+                              Icons.calendar_today,
+                              color: Colors.blueAccent,
+                            ),
+                            onTap: () async {
+                              final DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: _selectedDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now(),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: ThemeData.dark().copyWith(
+                                      colorScheme: ColorScheme.dark(
+                                        primary: Colors.blueAccent,
+                                        onPrimary: Colors.white,
+                                        surface: _cardBackground,
+                                        onSurface: _primaryTextColor,
+                                      ),
+                                      dialogBackgroundColor: _surfaceColor,
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setDialogState(() {
+                                  _selectedDate = picked;
+                                });
+                              }
+                            },
+                          ),
+
+                        if (_filterType == 'Date Range')
+                          Column(
+                            children: [
+                              ListTile(
+                                title: Text(
+                                  'Start Date',
+                                  style: TextStyle(color: _primaryTextColor),
+                                ),
+                                subtitle: Text(
+                                  DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(_filterStartDate),
+                                  style: TextStyle(color: Colors.blueAccent),
+                                ),
+                                trailing: Icon(
+                                  Icons.calendar_today,
+                                  color: Colors.blueAccent,
+                                ),
+                                onTap: () async {
+                                  final DateTime? picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: _filterStartDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime.now(),
+                                    builder: (context, child) {
+                                      return Theme(
+                                        data: ThemeData.dark().copyWith(
+                                          colorScheme: ColorScheme.dark(
+                                            primary: Colors.blueAccent,
+                                            onPrimary: Colors.white,
+                                            surface: _cardBackground,
+                                            onSurface: _primaryTextColor,
+                                          ),
+                                          dialogBackgroundColor: _surfaceColor,
+                                        ),
+                                        child: child!,
+                                      );
+                                    },
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() {
+                                      _filterStartDate = picked;
+                                    });
+                                  }
+                                },
+                              ),
+                              ListTile(
+                                title: Text(
+                                  'End Date',
+                                  style: TextStyle(color: _primaryTextColor),
+                                ),
+                                subtitle: Text(
+                                  DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(_filterEndDate),
+                                  style: TextStyle(color: Colors.blueAccent),
+                                ),
+                                trailing: Icon(
+                                  Icons.calendar_today,
+                                  color: Colors.blueAccent,
+                                ),
+                                onTap: () async {
+                                  final DateTime? picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: _filterEndDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime.now(),
+                                    builder: (context, child) {
+                                      return Theme(
+                                        data: ThemeData.dark().copyWith(
+                                          colorScheme: ColorScheme.dark(
+                                            primary: Colors.blueAccent,
+                                            onPrimary: Colors.white,
+                                            surface: _cardBackground,
+                                            onSurface: _primaryTextColor,
+                                          ),
+                                          dialogBackgroundColor: _surfaceColor,
+                                        ),
+                                        child: child!,
+                                      );
+                                    },
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() {
+                                      _filterEndDate = picked;
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        // Apply the filter
+                        setState(() {
+                          // This is where you would update the filtered data in a real app
+                          // Example: _filteredActivities = _getFilteredActivityData();
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: Text('Apply Filter'),
+                    ),
+                  ],
+                ),
+          ),
+    );
   }
 
   void _setGoalDialog(String activity) {
@@ -349,6 +606,9 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
     // Calculate total calories
     final totalCalories = _calculateTotalCaloriesBurnt();
 
+    // Get filtered activity data
+    final filteredActivities = _getFilteredActivityData();
+
     return Scaffold(
       backgroundColor: _darkBackground,
       appBar: AppBar(
@@ -364,6 +624,11 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
             icon: Icon(Icons.person_outline),
             onPressed: _setUserWeightDialog,
             tooltip: 'Set Weight',
+          ),
+          IconButton(
+            icon: Icon(Icons.filter_list),
+            onPressed: _showDateFilterDialog,
+            tooltip: 'Filter Data',
           ),
         ],
       ),
@@ -386,6 +651,81 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Date Card
+                Card(
+                  elevation: 8,
+                  color: _cardBackground,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: Colors.teal.withOpacity(0.6),
+                      width: 2,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              color: Colors.teal,
+                              size: 28,
+                            ),
+                            SizedBox(width: 16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "TODAY",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: _secondaryTextColor,
+                                    letterSpacing: 2.0,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  DateFormat(
+                                    'EEE, MMM d, yyyy',
+                                  ).format(DateTime.now()),
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: _primaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _filterType,
+                            style: TextStyle(
+                              color: Colors.teal,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
                 // Current Activity Card
                 Card(
                   elevation: 8,
@@ -537,23 +877,48 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: 4,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: _primaryTextColor,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: _primaryTextColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            "ACTIVITY SUMMARY",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _primaryTextColor,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        "ACTIVITY SUMMARY",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: _primaryTextColor,
-                          letterSpacing: 1.2,
+                      GestureDetector(
+                        onTap: _showDateFilterDialog,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.filter_list,
+                              color: Colors.blueAccent,
+                              size: 18,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              "Filter",
+                              style: TextStyle(
+                                color: Colors.blueAccent,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -564,7 +929,7 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                 ..._activityGoals.entries.map((entry) {
                   final activity = entry.key;
                   final goal = entry.value;
-                  final done = _activityDurations[activity] ?? 0;
+                  final done = filteredActivities[activity] ?? 0;
                   final progress = (done / goal).clamp(0.0, 1.0);
                   final caloriesBurned = _calculateCaloriesBurnt(
                     activity,
@@ -699,6 +1064,40 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
                     ),
                   );
                 }).toList(),
+
+                // No activities message when filtered data is empty
+                if (filteredActivities.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.fitness_center_outlined,
+                            color: _secondaryTextColor.withOpacity(0.5),
+                            size: 70,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            "No activities found for this period",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: _secondaryTextColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "Try adjusting your filter or get moving!",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _secondaryTextColor.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
