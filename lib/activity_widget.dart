@@ -34,6 +34,13 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   Light? _light;
   StreamSubscription? _lightSubscription;
 
+  // Dark theme colors
+  final _darkBackground = Color(0xFF121212);
+  final _cardBackground = Color(0xFF1E1E1E);
+  final _surfaceColor = Color(0xFF2C2C2C);
+  final _primaryTextColor = Colors.white;
+  final _secondaryTextColor = Colors.white70;
+
   @override
   void initState() {
     super.initState();
@@ -153,18 +160,41 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('Set Goal for $activity'),
+            backgroundColor: _surfaceColor,
+            title: Text(
+              'Set Goal for $activity',
+              style: TextStyle(color: _primaryTextColor),
+            ),
             content: TextField(
               controller: controller,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(hintText: 'Enter goal in seconds'),
+              style: TextStyle(color: _primaryTextColor),
+              decoration: InputDecoration(
+                hintText: 'Enter goal in seconds',
+                hintStyle: TextStyle(color: _secondaryTextColor),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: _getActivityColor(activity).withOpacity(0.5),
+                  ),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: _getActivityColor(activity)),
+                ),
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text('Cancel'),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey[400]),
+                ),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getActivityColor(activity),
+                  foregroundColor: Colors.black,
+                ),
                 onPressed: () {
                   final input = int.tryParse(controller.text);
                   if (input != null && input > 0) {
@@ -198,153 +228,258 @@ class _SensorActivityDetectorState extends State<SensorActivityDetector> {
   Color _getActivityColor(String activity) {
     switch (activity) {
       case 'Running':
-        return Colors.redAccent;
+        return Color(0xFFFF5252); // Vibrant red
       case 'Walking':
-        return Colors.blueAccent;
+        return Color(0xFF448AFF); // Bright blue
       case 'Jumping':
-        return Colors.greenAccent;
+        return Color.fromARGB(255, 178, 217, 71); // Bright green
       case 'Still':
-        return Colors.grey;
+        return Color.fromARGB(255, 214, 211, 211); // Medium grey
       case 'Sleeping':
-        return Colors.purpleAccent;
+        return Color.fromARGB(255, 44, 205, 103); // Rich purple
       default:
-        return Colors.blueGrey;
+        return Color(0xFF78909C); // Blue grey
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _darkBackground,
       appBar: AppBar(
-        title: Text('Activity Tracker'),
+        title: Text(
+          'Activity Tracker',
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0),
+        ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: _getActivityColor(_predictedActivity),
+        backgroundColor: _getActivityColor(_predictedActivity).withOpacity(0.8),
       ),
       body: Container(
-        color: Colors.black,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        "CURRENT ACTIVITY",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
+        decoration: BoxDecoration(
+          color: _darkBackground,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              _getActivityColor(_predictedActivity).withOpacity(0.15),
+              _darkBackground,
+            ],
+            stops: [0.0, 0.3],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  elevation: 8,
+                  color: _cardBackground,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: _getActivityColor(
                         _predictedActivity,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: _getActivityColor(_predictedActivity),
+                      ).withOpacity(0.6),
+                      width: 2,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Text(
+                          "CURRENT ACTIVITY",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _secondaryTextColor,
+                            letterSpacing: 2.0,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.timer, color: Colors.grey),
-                          SizedBox(width: 8),
-                          Text(
-                            _formatDuration(_currentActivityDuration),
+                        SizedBox(height: 16),
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _getActivityColor(
+                              _predictedActivity,
+                            ).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            _predictedActivity,
                             style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: _getActivityColor(_predictedActivity),
                             ),
                           ),
-                        ],
+                        ),
+                        SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.timer,
+                              color: _secondaryTextColor,
+                              size: 28,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              _formatDuration(_currentActivityDuration),
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w500,
+                                color: _primaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: 30),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: _primaryTextColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        "ACTIVITY SUMMARY",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: _primaryTextColor,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              SizedBox(height: 24),
-              Text(
-                "Activity Summary",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 12),
-              ..._activityGoals.entries.map((entry) {
-                final activity = entry.key;
-                final goal = entry.value;
-                final done = _activityDurations[activity] ?? 0;
-                final progress = (done / goal).clamp(0.0, 1.0);
+                SizedBox(height: 16),
+                ..._activityGoals.entries.map((entry) {
+                  final activity = entry.key;
+                  final goal = entry.value;
+                  final done = _activityDurations[activity] ?? 0;
+                  final progress = (done / goal).clamp(0.0, 1.0);
 
-                return Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
-                  child: Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: _getActivityColor(activity),
-                                  shape: BoxShape.circle,
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      elevation: 4,
+                      color: _cardBackground,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: _getActivityColor(activity),
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  activity,
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    activity,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: _primaryTextColor,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.edit_outlined,
+                                    size: 20,
+                                    color: _getActivityColor(activity),
+                                  ),
+                                  onPressed: () => _setGoalDialog(activity),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 16),
+                            Stack(
+                              children: [
+                                Container(
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: _surfaceColor,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                                FractionallySizedBox(
+                                  widthFactor: progress,
+                                  child: Container(
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: _getActivityColor(activity),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${_formatDuration(done)}',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 14,
+                                    color: _secondaryTextColor,
+                                  ),
+                                ),
+                                Text(
+                                  '${_formatDuration(goal)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _secondaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (done > 0)
+                              Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text(
+                                  '${(progress * 100).toInt()}% Complete',
+                                  style: TextStyle(
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w500,
+                                    color: _getActivityColor(activity),
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                icon: Icon(Icons.edit, size: 20),
-                                onPressed: () => _setGoalDialog(activity),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 8,
-                            backgroundColor: Colors.grey[300],
-                            color: _getActivityColor(activity),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            '${_formatDuration(done)} / ${_formatDuration(goal)}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            ],
+                  );
+                }).toList(),
+              ],
+            ),
           ),
         ),
       ),
